@@ -1,0 +1,279 @@
+package Frame;
+import java.awt.BorderLayout;
+import java.awt.Container;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.util.Calendar;
+import java.util.Map;
+import java.util.TimeZone;
+import javax.swing.ImageIcon;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingConstants;
+import javax.swing.Timer;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+
+import Data.Data;
+import Data.UserData;
+import Server.LiveState;
+import Server.PolicyServer;
+
+@SuppressWarnings("serial")
+public class Frame extends JFrame
+{
+	/******************************
+	 * メンバ変数
+	*******************************/
+	static JTextArea debugTextArea;		// デバッグ：テキストエリア
+	static JTextArea policyTextArea;	// ポリシーサーバ：テキストエリア
+	JTextField textField;				// 起動時間表示用テキストフィールド
+	long startTime;						// サーバ開始時間
+	
+	/******************************
+	 * コンストラクタ
+	*******************************/
+	public Frame()
+	{
+		// ウィンドウ設定
+		setTitle("NetWalkServer");
+		setSize(640, 480);
+		setLocationRelativeTo(null); // 画面の中央
+		
+		// 終了設定
+		setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+		this.addWindowListener(new WindowClosing());
+		
+		// 起動時間表示用テキストフィールド
+		textField = new JTextField();
+		textField.setEditable(false); // 書き込み禁止
+		
+		// デバッグ表示用テキストエリア
+		debugTextArea = new JTextArea("-----------Debug-----------\n");
+		debugTextArea.setEditable(false); // 書き込み禁止
+
+		// ポリシーサーバ用テキストエリア
+		policyTextArea = new JTextArea("-----------Policy-----------\n");
+		policyTextArea.setEditable(false); // 書き込み禁止
+		
+		// Splitパネル
+		JSplitPane splitPanel = new JSplitPane(JSplitPane.VERTICAL_SPLIT,
+                new JScrollPane(debugTextArea),
+                new JScrollPane(policyTextArea));
+		
+		// パネル
+		JPanel panel = new JPanel();
+		panel.setLayout(new BorderLayout());
+		panel.add(textField, BorderLayout.PAGE_START);
+		panel.add(splitPanel, BorderLayout.CENTER);
+		
+		// タブ
+		JTabbedPane tab = new JTabbedPane();
+		
+		// Debugタブ
+		tab.addTab("debug", panel);
+		JLabel label = new JLabel("debug", new ImageIcon(getClass().getResource("debug.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label);
+		
+        // Graphタブ
+        final JTextField graphText = new JTextField("graph");
+		tab.addTab("graph", graphText);
+		JLabel label2 = new JLabel("graph", new ImageIcon(getClass().getResource("graph.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label2);
+
+        // Userタブ
+		tab.addTab("User", new JTextField("User"));
+		JLabel label3 = new JLabel("user", new ImageIcon(getClass().getResource("user.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label3);
+
+        // Kickタブ
+		tab.addTab("kick", new JTextField("kick"));
+		JLabel label4 = new JLabel("kick", new ImageIcon(getClass().getResource("kick.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label4);
+        
+		/*
+		// Debugタブ
+		tab.addTab("debug", panel);
+		JLabel label = new JLabel("debug", new ImageIcon(getClass().getResource("./Graphic/debug.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label);
+		
+        // Graphタブ
+		tab.addTab("graph", new JTextField("graph"));
+		JLabel label2 = new JLabel("graph", new ImageIcon(getClass().getResource("./Graphic/graph.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label2);
+
+        // Userタブ
+		tab.addTab("User", new JTextField("User"));
+		JLabel label3 = new JLabel("user", new ImageIcon(getClass().getResource("./Graphic/user.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label3);
+
+        // Kickタブ
+		tab.addTab("kick", new JTextField("kick"));
+		JLabel label4 = new JLabel("kick", new ImageIcon(getClass().getResource("./Graphic/kick.png")), SwingConstants.CENTER);
+        tab.setTabComponentAt(tab.getTabCount()-1, label4);
+*/
+		// 追加
+		Container contentPane = getContentPane();
+		contentPane.add(tab, BorderLayout.CENTER);
+		
+		// サーバ開始時間
+		startTime = Calendar.getInstance(TimeZone.getTimeZone("GMT")).getTimeInMillis();
+		
+		// 表示
+		setVisible(true);
+		
+		// 稼働時間更新
+		Timer timer = new Timer(1000, new ActionListener()
+		{
+            public void actionPerformed(ActionEvent e)
+            {
+            	Calendar calender = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
+            	calender.setTimeInMillis(System.currentTimeMillis() - startTime);
+            	textField.setText("稼働時間 ： " + String.format("%d日 + %02d:%02d:%02d",
+            			calender.get(Calendar.DAY_OF_YEAR) - 1,
+                    	calender.get(Calendar.HOUR_OF_DAY),
+                    	calender.get(Calendar.MINUTE),
+                    	calender.get(Calendar.SECOND)));
+            }
+        });
+		timer.setInitialDelay(0);
+	    timer.start();
+	    
+	    // グラフ更新
+		Timer graphTimer = new Timer(10000, new ActionListener()
+		{
+            public void actionPerformed(ActionEvent e)
+            {
+            	String text = "";
+            	
+				// 全員のデータを表示
+				for(Map.Entry<String, UserData> user : Data.user.get().entrySet())
+				{
+					UserData data = user.getValue();
+					
+					// ユーザ名 (x, y)
+					text += user.getKey() + " (" + data.x + ", " + data.y + ") ";
+					
+					if (data.liveState == LiveState.Live)
+					{
+						text += " 配信中【" + data.liveTitle + "】「" + data.liveDetail + "」 ";
+					}
+					else if (data.liveState == LiveState.Listen)
+					{
+						text += " 視聴中【" + data.listenLiveID + "】 ";
+					}
+					
+					text += "\n";
+				}
+
+            	graphText.setText(text);
+            }
+        });
+		graphTimer.setInitialDelay(0);
+		graphTimer.start();
+
+	    
+	}
+	
+	/******************************
+	 * 現在時間（文字列）を取得
+	*******************************/
+	static private String getNow()
+	{
+		Calendar calender = Calendar.getInstance();
+		return String.format("%d/%d %02d:%02d:%02d",
+    			calender.get(Calendar.MONTH) + 1,
+    			calender.get(Calendar.DATE),
+            	calender.get(Calendar.HOUR_OF_DAY),
+            	calender.get(Calendar.MINUTE),
+            	calender.get(Calendar.SECOND));
+	}
+	
+	/******************************
+	 * デバッグ：文字追加
+	*******************************/
+	static public synchronized void appendDebugText(String str)
+	{
+		/*
+		//debugTextArea.append(str + " (" + getNow() + ")\n");
+		
+		// 更新時に最下位へ移動
+		Document doc = debugTextArea.getDocument();
+		try
+		{
+			doc.insertString(doc.getLength(), "(" + getNow() + ")  " + str + "\n", null);
+			debugTextArea.setCaretPosition(doc.getLength());
+		}
+		catch(BadLocationException e)
+		{
+			e.printStackTrace();
+		}
+		*/
+	}
+	
+	/******************************
+	 * ポリシーサーバ：文字追加
+	*******************************/
+	static public synchronized void appendPolicyText(String str)
+	{
+		/*
+		//policyTextArea.append(str + " (" + getNow() + ")\n");
+		
+		// 更新時に最下位へ移動
+		Document doc = policyTextArea.getDocument();
+		try
+		{
+			doc.insertString(doc.getLength(),  "(" + getNow() + ")  " + str + "\n", null);
+			policyTextArea.setCaretPosition(doc.getLength());
+		}
+		catch(BadLocationException e)
+		{
+			e.printStackTrace();
+		}
+		*/
+	}
+}
+
+/******************************
+ * 終了処理クラス
+*******************************/
+class WindowClosing extends WindowAdapter
+{
+	/******************************
+	 * 終了イベント
+	*******************************/
+	public void windowClosing(WindowEvent e)
+	{
+		// 終了メッセージ表示
+		int nReturn = JOptionPane.showConfirmDialog(null, "終了しますか？", "終了確認",JOptionPane.YES_NO_OPTION);
+
+		// Yesを押下した
+		if(nReturn == JOptionPane.YES_OPTION)
+		{
+			// 終了処理
+			close();
+		}
+    }
+	
+	/******************************
+	 * 終了処理
+	*******************************/
+	private void close()
+	{
+		// ポリシーサーバ終了
+		PolicyServer.close();
+		
+		// ウィンドウを閉じる
+		System.exit(0);
+	}
+}
+
